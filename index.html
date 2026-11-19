@@ -5,7 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light" />
     <link rel="icon" href="data:," />
-    <title>The Sammy — hellosamkoch.com</title>
+    <title>The Sammy</title>
+    <!-- Share preview: texting the link shows the sky-and-clouds title card.
+         og-image.jpg is hosted next to the page at hellosamkoch.com. -->
+    <meta name="description" content="Sam Koch's website. Click the TV." />
+    <meta property="og:title" content="The Sammy" />
+    <meta property="og:description" content="Sam Koch's website. Click the TV." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://hellosamkoch.com/" />
+    <meta property="og:image" content="https://hellosamkoch.com/og-image.jpg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="The Sammy" />
+    <meta name="twitter:image" content="https://hellosamkoch.com/og-image.jpg" />
     <style>
       /* Self-hosted fonts (assets/), so the lettering never depends on a CDN.
          Chalk: "Architects Daughter", a hand-lettered print hand.
@@ -302,14 +313,23 @@
         object-fit: cover;
         filter: brightness(1.07) saturate(1.10) contrast(1.02);
       }
-      /* Board green in the artwork spans ~x 2.5%-71.5%, y 3.5%-92.5%.
-         Text block stays inside: left 5.5%, top 7%, width 62%, height 82%. */
+      /* Board green, pixel-measured on the 2048x1152 artwork: x 2.3%-71.1%
+         (right edge tapers to 70.1% lower down), top y 3.9%, and the bottom
+         edge SLANTS up to the right — y 93.1% at x 10%, 80.4% at x 68%.
+         The text block is sized against that slant: left 4.8%, top 6%,
+         width 63%, height 70%, so the last line's right end (y 76%) stays
+         ~4.5% of stage height above the green's bottom edge there, and the
+         longest line ends at ~67% of stage width, clear of the frame.
+         The sentence measures 18.30em in Architects Daughter; at 3.6cqw
+         with -0.02em tracking it spans ~62% of the stage width. A script
+         below re-measures the real rendered lines and shrinks the chalk
+         if a fallback font ever renders wider. */
       .board-writing {
         position: absolute;
-        left: 5.5%;
-        top: 7%;
-        width: 62%;
-        height: 82%;
+        left: 4.8%;
+        top: 6%;
+        width: 63%;
+        height: 70%;
         display: flex;
         flex-direction: column;
         justify-content: space-between;
@@ -317,8 +337,9 @@
       }
       .chalk-line {
         font-family: "Architects Daughter", cursive;
-        font-size: 3.15cqw;
-        line-height: 1.12;
+        font-size: var(--chalk-fs, 3.6cqw);
+        letter-spacing: -0.02em;
+        line-height: 1.08;
         white-space: nowrap;
         clip-path: inset(-35% 102% -35% -2%);
       }
@@ -331,8 +352,9 @@
         display: inline-block;
         color: #ffffff;
         text-shadow:
-          0 0 1px rgba(255, 255, 255, 0.55),
-          0 0 5px rgba(255, 255, 255, 0.16);
+          0 0 1px rgba(255, 255, 255, 0.9),
+          0 0 6px rgba(255, 255, 255, 0.45),
+          0 0 14px rgba(255, 255, 255, 0.18);
       }
 
       @media (prefers-reduced-motion: reduce) {
@@ -425,7 +447,10 @@
            writing; when the board is full it holds, then the TV shuts
            itself off. Clicking while on turns it off at any point. */
         var LINE_TEXT = "I WILL MAKE MY OWN WEBSITE SOON.";
-        var LINE_COUNT = 13;
+        // 10 lines: at the bigger 3.6cqw chalk, 10 lines is what fits
+        // inside the green (see the board geometry note in the CSS) —
+        // containment wins over line count.
+        var LINE_COUNT = 10;
         var TITLE_MS = 2600;  // title card holds ~2.6s, then cut to the gag
         var WRITE_MS = 2300;  // slow: each line takes ~2.3s to write
         var GAP_MS = 350;     // a short breath between lines
@@ -452,13 +477,14 @@
         }
         var rand = mulberry32(20261118);
 
-        // Build the 13 chalk lines, one span per letter with tiny
+        // Build the chalk lines, one span per letter with tiny
         // rotation / baseline jitter so it reads hand-printed, not typed.
+        // Full-opacity chalk: no per-line dimming, so every line reads
+        // equally bright on the green.
         var lines = [];
         for (var i = 0; i < LINE_COUNT; i++) {
           var line = document.createElement("div");
           line.className = "chalk-line";
-          line.style.opacity = (0.9 + rand() * 0.1).toFixed(2);
           for (var c = 0; c < LINE_TEXT.length; c++) {
             var ch = document.createElement("span");
             ch.className = "ch";
@@ -472,6 +498,35 @@
           board.appendChild(line);
           lines.push(line);
         }
+
+        /* ---------- Chalk fit safety ----------
+           The CSS geometry is computed from the real font's metrics, but
+           if the chalk font ever fails to load, a fallback hand can run
+           wider and spill past the frame. Measure the actual rendered
+           lines against the block and shrink the chalk just enough to
+           fit — the writing never crosses the board's edge. */
+        function fitChalk() {
+          board.style.removeProperty("--chalk-fs");
+          void board.offsetWidth; // re-measure at the CSS size
+          var avail = board.clientWidth;
+          if (!avail || !lines.length) return;
+          var fs = parseFloat(window.getComputedStyle(lines[0]).fontSize);
+          var max = 0;
+          for (var i = 0; i < lines.length; i++) {
+            max = Math.max(max, lines[i].scrollWidth);
+          }
+          if (fs && max > avail) {
+            var scaled = Math.floor(fs * (avail / max) * 0.99 * 10) / 10;
+            board.style.setProperty("--chalk-fs", scaled + "px");
+          }
+        }
+        if (document.fonts && document.fonts.ready) {
+          document.fonts.ready.then(fitChalk);
+        } else {
+          fitChalk();
+        }
+        window.addEventListener("resize", fitChalk);
+        window.addEventListener("orientationchange", fitChalk);
 
         var state = "off"; // "off" | "on"
         var busy = false;
